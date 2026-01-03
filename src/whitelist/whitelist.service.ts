@@ -23,40 +23,64 @@ export class WhitelistService {
         private whitelistModel: Model<WhitelistDocument>,
     ) { }
 
-    async findAll(params: { search?: string; status?: StatusFilter }) {
-        const search = params.search?.trim();
-        const status = (params.status || 'all') as StatusFilter;
+    async findAll(params: {
+        search?: string;
+        status?: StatusFilter;
+        page?: number;
+        limit?: number
+    }) {
+        const { search, status = 'all' } = params;
+        const page = Math.max(1, params.page || 1);
+        const limit = Math.max(1, Math.min(params.limit || 50, 500));
+        const skip = (page - 1) * limit;
 
         const filter: any = {};
-        if (search) filter.plate = { $regex: normalizePlate(search), $options: 'i' };
+        if (search) {
+            filter.plate = { $regex: normalizePlate(search), $options: 'i' };
+        }
 
+        // Logic lọc trạng thái
         const now = new Date();
-
         if (status === 'active') {
             filter.active = true;
             filter.$or = [{ validTo: { $exists: false } }, { validTo: { $gte: now } }];
-        }
-        if (status === 'expired') {
+        } else if (status === 'expired') {
             filter.validTo = { $lt: now };
-        }
-        if (status === 'inactive') {
+        } else if (status === 'inactive') {
             filter.active = false;
         }
 
-        return this.whitelistModel.find(filter).sort({ createdAt: -1 }).lean();
+        const [items, total] = await Promise.all([
+            this.whitelistModel
+                .find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            this.whitelistModel.countDocuments(filter),
+        ]);
+
+        return {
+            data: items,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
 
     async create(dto: CreateWhitelistDto, createdByUserId?: string) {
         const plate = normalizePlate(dto.plate);
-        if (!plate) throw new BadRequestException('plate is required');
+        if (!plate) throw new BadRequestException('Plate is required');
 
         const exists = await this.whitelistModel.findOne({ plate }).lean();
-        if (exists) throw new ConflictException('plate already exists');
+        if (exists) throw new ConflictException('Plate already exists');
 
         const doc = await this.whitelistModel.create({
+            ...dto,
             plate,
-            owner: dto.owner,
-            note: dto.note,
             active: dto.active ?? true,
             validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
             validTo: dto.validTo ? new Date(dto.validTo) : undefined,
@@ -67,38 +91,43 @@ export class WhitelistService {
     }
 
     async update(id: string, dto: UpdateWhitelistDto) {
-        const update: any = { ...dto };
+        const updateData: any = { ...dto };
 
         if (dto.plate !== undefined) {
             const plate = normalizePlate(dto.plate);
-            if (!plate) throw new BadRequestException('plate is invalid');
+            if (!plate) throw new BadRequestException('Plate is invalid');
 
             const exists = await this.whitelistModel.findOne({ plate }).lean();
-            if (exists && String(exists._id) !== id) throw new ConflictException('plate already exists');
-
-            update.plate = plate;
+            if (exists && String(exists._id) !== id) {
+                throw new ConflictException('Plate already exists');
+            }
+            updateData.plate = plate;
         }
 
-        if (dto.validFrom !== undefined) update.validFrom = dto.validFrom ? new Date(dto.validFrom) : undefined;
-        if (dto.validTo !== undefined) update.validTo = dto.validTo ? new Date(dto.validTo) : undefined;
+        if (dto.validFrom !== undefined) updateData.validFrom = dto.validFrom ? new Date(dto.validFrom) : undefined;
+        if (dto.validTo !== undefined) updateData.validTo = dto.validTo ? new Date(dto.validTo) : undefined;
 
-        const doc = await this.whitelistModel.findByIdAndUpdate(id, update, { new: true }).lean();
-        if (!doc) throw new NotFoundException('whitelist not found');
+        const doc = await this.whitelistModel
+            .findByIdAndUpdate(id, updateData, { new: true })
+            .lean();
+
+        if (!doc) throw new NotFoundException('Whitelist entry not found');
         return doc;
     }
 
     async toggle(id: string) {
         const doc = await this.whitelistModel.findById(id);
-        if (!doc) throw new NotFoundException('whitelist not found');
+        if (!doc) throw new NotFoundException('Whitelist entry not found');
+
         doc.active = !doc.active;
         await doc.save();
         return doc.toObject();
     }
 
     async remove(id: string) {
-        const doc = await this.whitelistModel.findByIdAndDelete(id).lean();
-        if (!doc) throw new NotFoundException('whitelist not found');
-        return { deleted: true };
+        const result = await this.whitelistModel.findByIdAndDelete(id).lean();
+        if (!result) throw new NotFoundException('Whitelist entry not found');
+        return { deleted: true, id };
     }
 
     async findByPlateNormalized(plateNormalized: string) {
