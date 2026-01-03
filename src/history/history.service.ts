@@ -5,7 +5,6 @@ import { History, HistoryDocument } from './history.schema';
 import { HistoryQueryDto } from './dto/history-query.dto';
 
 export type CheckReason = 'MATCHED' | 'NOT_FOUND' | 'INACTIVE' | 'EXPIRED';
-
 export type CheckSource = 'MANUAL' | 'OCR';
 
 function normalizePlate(value: string) {
@@ -23,9 +22,8 @@ export class HistoryService {
         plate: string;
         allowed: boolean;
         reason: CheckReason;
-        checkedBy: string; 
+        checkedBy: string;
         whitelistRef?: string;
-
         source?: 'MANUAL' | 'OCR';
         imageUrl?: string;
         confidence?: number;
@@ -38,7 +36,6 @@ export class HistoryService {
             whitelistRef: params.whitelistRef
                 ? new Types.ObjectId(params.whitelistRef)
                 : undefined,
-
             source: params.source ?? 'MANUAL',
             imageUrl: params.imageUrl ?? null,
             confidence: params.confidence ?? null,
@@ -54,22 +51,16 @@ export class HistoryService {
     }) {
         const { query, role, userId } = options;
 
-        const limit = Math.min(Number(options.limit ?? 50), 200);
-        const page = Math.max(Number(options.page ?? 1), 1);
+        const limit = Math.max(1, Number(options.limit || 1000));
+        const page = Math.max(1, Number(options.page || 1));
         const skip = (page - 1) * limit;
 
         const filter: any = {};
 
-        /**
-         * STAFF chỉ xem lịch sử của chính mình
-         */
         if (role === 'STAFF') {
             filter.checkedBy = new Types.ObjectId(userId);
         }
 
-        /**
-         * Search theo plate
-         */
         if (query.search) {
             filter.plate = {
                 $regex: normalizePlate(query.search),
@@ -77,22 +68,13 @@ export class HistoryService {
             };
         }
 
-        /**
-         * Filter theo kết quả
-         */
         if (query.result === 'allowed') filter.allowed = true;
         if (query.result === 'denied') filter.allowed = false;
 
-        /**
-         * Filter theo source (MANUAL | OCR)
-         */
         if (query.source) {
             filter.source = query.source;
         }
 
-        /**
-         * Filter theo khoảng thời gian
-         */
         const createdAt: any = {};
         if (query.from) createdAt.$gte = new Date(query.from);
         if (query.to) createdAt.$lte = new Date(query.to);
@@ -106,22 +88,19 @@ export class HistoryService {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
-                .populate('checkedBy', 'username role') 
+                .populate('checkedBy', 'username role')
                 .lean(),
-
             this.historyModel.countDocuments(filter),
         ]);
 
         return {
             items,
-            pagination: {
+            meta: {
+                total,
                 page,
                 limit,
-                total,
                 totalPages: Math.ceil(total / limit),
             },
         };
-
     }
-
 }
