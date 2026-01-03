@@ -11,38 +11,39 @@ import { Roles } from 'src/auth/guards/roles.decorator';
 export class WhitelistController {
     constructor(private readonly whitelistService: WhitelistService) { }
 
-    // ADMIN + STAFF đều xem được (tuỳ bạn)
     @Get()
     findAll(
         @Query('search') search?: string,
         @Query('status') status?: 'all' | 'active' | 'expired' | 'inactive',
+        @Query('page') page: number = 1,
+        @Query('limit') limit: number = 500,
     ) {
-        return this.whitelistService.findAll({ search, status });
+        return this.whitelistService.findAll({ 
+            search, 
+            status, 
+            page: Number(page), 
+            limit: Number(limit) 
+        });
     }
 
-    // ADMIN tạo
     @Post()
     @Roles('ADMIN')
     create(@Body() dto: CreateWhitelistDto, @Req() req: any) {
-        // req.user.sub là userId trong JWT payload
         return this.whitelistService.create(dto, req.user?.sub);
     }
 
-    // ADMIN sửa
     @Patch(':id')
     @Roles('ADMIN')
     update(@Param('id') id: string, @Body() dto: UpdateWhitelistDto) {
         return this.whitelistService.update(id, dto);
     }
 
-    // ADMIN bật/tắt
     @Patch(':id/toggle')
     @Roles('ADMIN')
     toggle(@Param('id') id: string) {
         return this.whitelistService.toggle(id);
     }
 
-    // ADMIN xoá
     @Delete(':id')
     @Roles('ADMIN')
     remove(@Param('id') id: string) {
