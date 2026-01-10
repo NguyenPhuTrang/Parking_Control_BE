@@ -10,6 +10,9 @@ export class AuthService {
         private jwtService: JwtService,
     ) { }
 
+    async register(username: string, password: string) {
+        return this.usersService.createStaff(username, password);
+    }
     async login(username: string, password: string) {
         const u = username.trim().toLowerCase();
 

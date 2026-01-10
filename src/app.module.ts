@@ -12,7 +12,6 @@ import { CheckModule } from './check/check.module';
 // import { WhitelistModule } from './whitelist/whitelist.module';
 // import { HistoryModule } from './history/history.module';
 // import { CheckModule } from './check/check.module';
-import { AlprModule } from './alpr/alpr.module';
 // import { UsersModule } from './users/users.module';
 // import { AuthModule } from './auth/auth.module';
 // import { WhitelistModule } from './whitelist/whitelist.module';
@@ -35,7 +34,6 @@ import { AlprModule } from './alpr/alpr.module';
     WhitelistModule,
     HistoryModule,
     CheckModule,
-    AlprModule,
   ],
 })
 export class AppModule {}
